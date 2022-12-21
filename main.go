@@ -10,9 +10,12 @@ import (
 	"path/filepath"
 
 	"github.com/Shopify/ejson"
+	"github.com/geofffranks/spruce"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/viper"
 	"gopkg.in/src-d/go-billy.v4"
 	"gopkg.in/src-d/go-billy.v4/memfs"
+	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/kustomize/api/konfig"
 	"sigs.k8s.io/kustomize/api/types"
 )
@@ -58,10 +61,30 @@ func main() {
 		os.Exit(3)
 	}
 
-	file, _ := vfs.OpenFile("bla/bla/blu/blu.ejson", os.O_RDONLY, os.ModePerm)
-	filebyte, _ := io.ReadAll(file)
-	fmt.Println(string(filebyte))
-	//fmt.Println(c.ExtraDirectories[0])
+	// merge all together with spruce
+	m := make(map[interface{}]interface{})
+
+	filepath.Walk(c.RootDirectory, func(path string, info fs.FileInfo, err error) error {
+		if info.IsDir() {
+			return err
+		}
+		file, err := vfs.Open(path)
+		if err != nil {
+			fmt.Println("hi", err)
+			os.Exit(1)
+		}
+		filebyte, err := io.ReadAll(file)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		tmp := make(map[interface{}]interface{})
+		_ = yaml.Unmarshal(filebyte, &tmp)
+		m, err = spruce.Merge(m, tmp)
+		return err
+	})
+	a, _ := jsoniter.MarshalIndent(m, "", " ")
+	fmt.Println(string(a))
 
 }
 
@@ -117,14 +140,7 @@ func configure() {
 		io.Copy(dst, src)
 		return err
 	})
-	//fmt.Println(vfs.Root())
-	// tmp, err = os.MkdirTemp("", "ejsonmerger")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
-	// cp.Copy(c.RootDirectory, tmp)
-	//defer os.Remove(tmp.Name())
+
 }
 
 func readKustomize() (types.Kustomization, error) {
